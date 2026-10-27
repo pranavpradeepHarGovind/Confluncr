@@ -1,0 +1,40 @@
+from typing import Generator
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from app.config import get_settings
+
+settings = get_settings()
+
+# Support SQLite connect args if used in unit tests
+connect_args = {}
+if settings.DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=settings.DB_ECHO,
+    pool_pre_ping=True,
+    connect_args=connect_args,
+    **({} if settings.DATABASE_URL.startswith("sqlite") else {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+    })
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+    expire_on_commit=False,
+)
+
+Base = declarative_base()
+
+
+def get_db() -> Generator[Session, None, None]:
+    """FastAPI dependency for yielding database session per request."""
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
